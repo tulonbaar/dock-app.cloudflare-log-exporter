@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.vscode/
+
+# Local runtime artifacts
+data/
+
+# Local environment configuration
+.env
