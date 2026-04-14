@@ -8,18 +8,28 @@ namespace CloudflareLogExporter;
 public sealed class CloudflareLogsClient
 {
     private readonly HttpClient _httpClient;
+    private readonly ILogger<CloudflareLogsClient> _logger;
     private readonly CloudflareOptions _options;
 
-    public CloudflareLogsClient(HttpClient httpClient, IOptions<CloudflareOptions> options)
+    public CloudflareLogsClient(
+        HttpClient httpClient,
+        IOptions<CloudflareOptions> options,
+        ILogger<CloudflareLogsClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _logger = logger;
     }
 
     public async Task<string> FetchLogsAsync(DateTimeOffset start, DateTimeOffset end, CancellationToken cancellationToken)
     {
         var baseUrl = _options.BaseUrl.TrimEnd('/');
         var sql = BuildSqlQuery(start, end);
+        _logger.LogDebug(
+            "Cloudflare SQL window start={StartUtc:o}, end={EndUtc:o}, timeColumn={TimeColumn}",
+            start.UtcDateTime,
+            end.UtcDateTime,
+            _options.TimeColumn);
         var url = $"{baseUrl}/zones/{_options.ZoneId}/logs/explorer/query/sql" +
                   $"?query={Uri.EscapeDataString(sql)}";
 
@@ -45,6 +55,7 @@ public sealed class CloudflareLogsClient
         return $"SELECT {_options.SelectColumns} FROM {_options.Dataset} " +
              $"WHERE {_options.TimeColumn} >= '{startUtc}' " +
              $"AND {_options.TimeColumn} < '{endUtc}' " +
+                         $"ORDER BY {_options.TimeColumn} DESC " +
                $"LIMIT {_options.MaxRows}";
     }
 }

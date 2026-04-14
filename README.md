@@ -28,12 +28,15 @@ cp .env.example .env
 - `Cloudflare__ZoneId`
 - opcjonalnie: `Cloudflare__IngestionDelaySeconds` (domyślnie `180`)
 - `Storage__TimeZoneId` (np. `Europe/Warsaw`, `America/New_York`, `UTC`)
+- `Storage__RewriteCloudflareTimestampsToLocal` (`true`/`false`)
 
 Token powinien mieć uprawnienia do odczytu logów dla strefy (zone).
 
 `Cloudflare__IngestionDelaySeconds` pomaga uniknąć pustych odpowiedzi dla zbyt świeżych okien czasowych (opóźnienie indeksowania po stronie Log Explorer).
 
 `Storage__TimeZoneId` steruje tym, jak aplikacja pokazuje lokalny czas w swoich logach i jak wzbogaca rekordy zapisywane do NDJSON. Surowe timestampy z Cloudflare pozostają w UTC, ale obok zapisywany jest ich odpowiednik w skonfigurowanej strefie.
+
+Jeśli `Storage__RewriteCloudflareTimestampsToLocal=true`, pola czasu z Cloudflare (np. `edgestarttimestamp`, `edgeendtimestamp`) są zapisywane w NDJSON już w strefie `Storage__TimeZoneId`, a ich pierwotna wersja UTC trafia do pól z sufiksem `_utc`.
 
 Każdy nowy rekord NDJSON zawiera też kanoniczne pola czasu zdarzenia:
 - `_event_timestamp_source` - kolumna Cloudflare użyta do wyznaczenia czasu zdarzenia

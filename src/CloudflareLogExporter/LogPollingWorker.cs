@@ -32,7 +32,10 @@ public sealed class LogPollingWorker : BackgroundService
         Directory.CreateDirectory(Path.GetDirectoryName(_storageOptions.OutputPath) ?? ".");
 
         var ingestionDelay = TimeSpan.FromSeconds(_cloudflareOptions.IngestionDelaySeconds);
-        var lastEnd = DateTimeOffset.UtcNow.AddMinutes(-_storageOptions.LookbackMinutes) - ingestionDelay;
+        var nowLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _configuredTimeZone.TimeZoneInfo);
+        var initialEndLocal = nowLocal - ingestionDelay;
+        var lastEndLocal = initialEndLocal.AddMinutes(-_storageOptions.LookbackMinutes);
+        var lastEnd = TimeZoneInfo.ConvertTime(lastEndLocal, TimeZoneInfo.Utc);
         var interval = TimeSpan.FromSeconds(_cloudflareOptions.QueryIntervalSeconds);
 
         _logger.LogInformation(
@@ -47,7 +50,9 @@ public sealed class LogPollingWorker : BackgroundService
         {
             try
             {
-                var end = DateTimeOffset.UtcNow - ingestionDelay;
+                nowLocal = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, _configuredTimeZone.TimeZoneInfo);
+                var endLocal = nowLocal - ingestionDelay;
+                var end = TimeZoneInfo.ConvertTime(endLocal, TimeZoneInfo.Utc);
 
                 if (end <= lastEnd)
                 {
@@ -179,6 +184,12 @@ public sealed class LogPollingWorker : BackgroundService
             AddLocalTimestampProjection(rootNode, _cloudflareOptions.TimeColumn);
             AddCanonicalEventTimestamps(rootNode);
 
+            if (_storageOptions.RewriteCloudflareTimestampsToLocal)
+            {
+                RewriteTimestampFieldToLocal(rootNode, "edgestarttimestamp");
+                RewriteTimestampFieldToLocal(rootNode, _cloudflareOptions.TimeColumn);
+            }
+
             return rootNode.ToJsonString();
         }
         catch (JsonException)
@@ -234,6 +245,32 @@ public sealed class LogPollingWorker : BackgroundService
 
             rootNode["_event_timestamp_utc"] = timestamp.UtcDateTime.ToString("O");
             rootNode["_event_timestamp_local"] = TimeZoneInfo.ConvertTime(timestamp, _configuredTimeZone.TimeZoneInfo).ToString("O");
+            return;
+        }
+    }
+
+    private void RewriteTimestampFieldToLocal(JsonObject rootNode, string propertyName)
+    {
+        foreach (var property in rootNode)
+        {
+            if (!string.Equals(property.Key, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (property.Value is null)
+            {
+                return;
+            }
+
+            var rawValue = property.Value.GetValue<string>();
+            if (!DateTimeOffset.TryParse(rawValue, out var timestamp))
+            {
+                return;
+            }
+
+            rootNode[$"{property.Key}_utc"] = timestamp.UtcDateTime.ToString("O");
+            rootNode[property.Key] = TimeZoneInfo.ConvertTime(timestamp, _configuredTimeZone.TimeZoneInfo).ToString("O");
             return;
         }
     }

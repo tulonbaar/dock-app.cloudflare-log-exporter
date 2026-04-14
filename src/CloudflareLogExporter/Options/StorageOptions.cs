@@ -12,6 +12,8 @@ public sealed class StorageOptions
     [Required]
     public string TimeZoneId { get; init; } = "UTC";
 
+    public bool RewriteCloudflareTimestampsToLocal { get; init; } = true;
+
     [Range(1, 120)]
     public int LookbackMinutes { get; init; } = 5;
 }
