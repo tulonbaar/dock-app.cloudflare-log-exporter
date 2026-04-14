@@ -1,0 +1,12 @@
+services:
+  cloudflare-log-exporter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      TZ: ${Storage__TimeZoneId:-UTC}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
