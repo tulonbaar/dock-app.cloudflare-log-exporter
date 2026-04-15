@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using CloudflareLogExporter.Options;
@@ -7,6 +8,12 @@ namespace CloudflareLogExporter;
 
 public sealed class LogPollingWorker : BackgroundService
 {
+    private static readonly JsonSerializerOptions NdjsonSerializerOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = false
+    };
+
     private readonly ILogger<LogPollingWorker> _logger;
     private readonly CloudflareLogsClient _cloudflareClient;
     private readonly CloudflareOptions _cloudflareOptions;
@@ -190,7 +197,7 @@ public sealed class LogPollingWorker : BackgroundService
                 RewriteTimestampFieldToLocal(rootNode, _cloudflareOptions.TimeColumn);
             }
 
-            return rootNode.ToJsonString();
+            return rootNode.ToJsonString(NdjsonSerializerOptions);
         }
         catch (JsonException)
         {
