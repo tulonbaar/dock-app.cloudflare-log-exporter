@@ -1,81 +1,81 @@
 # Cloudflare Log Exporter (PoC)
 
-PoC aplikacji w C# (.NET 10), która cyklicznie pobiera **logi** z API Cloudflare Log Explorer (SQL API) i zapisuje je do lokalnego pliku NDJSON.
+A C# (.NET 10) proof-of-concept application that periodically fetches **logs** from the Cloudflare Log Explorer API (SQL API) and writes them to a local NDJSON file.
 
-## Zakres PoC
+## PoC Scope
 
-- Cykliczny polling API Cloudflare (nie metryki, tylko logi).
-- Pobieranie przez endpoint `zones/{zone_id}/logs/explorer/query/sql`.
-- Konfiguracja przez `.env`.
-- Zapis logów do pliku lokalnego (`/app/data/cloudflare-logs.ndjson`).
-- Struktura przygotowana pod kolejny krok: bezpośredni zapis do Elasticsearch.
+- Periodic polling of the Cloudflare API (logs only, not metrics).
+- Fetching through the `zones/{zone_id}/logs/explorer/query/sql` endpoint.
+- Configuration via `.env`.
+- Writing logs to a local file (`/app/data/cloudflare-logs.ndjson`).
+- Structure prepared for the next step: direct writes to Elasticsearch.
 
-## Wymagania
+## Requirements
 
 - Docker + Docker Compose.
 
-## Konfiguracja
+## Configuration
 
-1. Skopiuj plik konfiguracyjny:
+1. Copy the configuration file:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Ustaw wartości:
+2. Set the values:
 
 - `Cloudflare__ApiToken`
 - `Cloudflare__ZoneId`
-- opcjonalnie: `Cloudflare__IngestionDelaySeconds` (domyślnie `180`)
-- `Storage__TimeZoneId` (np. `Europe/Warsaw`, `America/New_York`, `UTC`)
+- optional: `Cloudflare__IngestionDelaySeconds` (default: `180`)
+- `Storage__TimeZoneId` (for example: `Europe/Warsaw`, `America/New_York`, `UTC`)
 - `Storage__RewriteCloudflareTimestampsToLocal` (`true`/`false`)
 
-Token powinien mieć uprawnienia do odczytu logów dla strefy (zone).
+The token should have permissions to read logs for the zone.
 
-`Cloudflare__IngestionDelaySeconds` pomaga uniknąć pustych odpowiedzi dla zbyt świeżych okien czasowych (opóźnienie indeksowania po stronie Log Explorer).
+`Cloudflare__IngestionDelaySeconds` helps avoid empty responses for very recent time windows (indexing delay on the Log Explorer side).
 
-`Storage__TimeZoneId` steruje tym, jak aplikacja pokazuje lokalny czas w swoich logach i jak wzbogaca rekordy zapisywane do NDJSON. Surowe timestampy z Cloudflare pozostają w UTC, ale obok zapisywany jest ich odpowiednik w skonfigurowanej strefie.
+`Storage__TimeZoneId` controls how the application displays local time in its own logs and how it enriches records written to NDJSON. Raw Cloudflare timestamps stay in UTC, and their equivalent in the configured time zone is stored alongside them.
 
-Jeśli `Storage__RewriteCloudflareTimestampsToLocal=true`, pola czasu z Cloudflare (np. `edgestarttimestamp`, `edgeendtimestamp`) są zapisywane w NDJSON już w strefie `Storage__TimeZoneId`, a ich pierwotna wersja UTC trafia do pól z sufiksem `_utc`.
+If `Storage__RewriteCloudflareTimestampsToLocal=true`, Cloudflare time fields (for example `edgestarttimestamp`, `edgeendtimestamp`) are written to NDJSON in the `Storage__TimeZoneId` time zone, while their original UTC values are stored in fields with the `_utc` suffix.
 
-Każdy nowy rekord NDJSON zawiera też kanoniczne pola czasu zdarzenia:
-- `_event_timestamp_source` - kolumna Cloudflare użyta do wyznaczenia czasu zdarzenia
-- `_event_timestamp_utc` - czas zdarzenia w UTC
-- `_event_timestamp_local` - ten sam czas przeliczony do `Storage__TimeZoneId`
+Each new NDJSON record also includes canonical event-time fields:
+- `_event_timestamp_source` - Cloudflare column used to determine event time
+- `_event_timestamp_utc` - event time in UTC
+- `_event_timestamp_local` - the same time converted to `Storage__TimeZoneId`
 
-Domyślny zestaw `Cloudflare__SelectColumns` zbiera teraz pola przydatne operacyjnie:
+The default `Cloudflare__SelectColumns` set now collects operationally useful fields:
 
-- identyfikacja celu: `ZoneName`, `ClientRequestScheme`, `ClientRequestHost`, `ClientRequestURI`
-- klient i lokalizacja: `ClientIP`, `ClientCountry`, `ClientCity`, `ClientLatitude`, `ClientLongitude`
-- rozmiary i statusy: `ClientRequestBytes`, `EdgeResponseStatus`, `EdgeResponseBytes`, `EdgeResponseBodyBytes`, `EdgeResponseContentType`, `OriginResponseStatus`
-- czasy: `EdgeStartTimestamp`, `EdgeEndTimestamp`, `EdgeTimeToFirstByteMs`, `OriginResponseDurationMs`
+- target identification: `ZoneName`, `ClientRequestScheme`, `ClientRequestHost`, `ClientRequestURI`
+- client and location: `ClientIP`, `ClientCountry`, `ClientCity`, `ClientLatitude`, `ClientLongitude`
+- sizes and statuses: `ClientRequestBytes`, `EdgeResponseStatus`, `EdgeResponseBytes`, `EdgeResponseBodyBytes`, `EdgeResponseContentType`, `OriginResponseStatus`
+- timing: `EdgeStartTimestamp`, `EdgeEndTimestamp`, `EdgeTimeToFirstByteMs`, `OriginResponseDurationMs`
 
-## Uruchomienie
+## Run
 
 ```bash
 docker compose up --build -d
 ```
 
-Kontener używa strefy z `Storage__TimeZoneId`, dzięki czemu logi aplikacji i lokalne projekcje czasu są zgodne z ustawieniami środowiska.
+The container uses the time zone from `Storage__TimeZoneId`, so application logs and local time projections are consistent with your environment settings.
 
-## Podgląd logów aplikacji
+## View Application Logs
 
 ```bash
 docker compose logs -f cloudflare-log-exporter
 ```
 
-## Wynik PoC
+## PoC Output
 
-Plik z logami pojawi się lokalnie w katalogu:
+The log file will appear locally in:
 
 - `./data/cloudflare-logs.ndjson`
 
-## Zatrzymanie
+## Stop
 
 ```bash
 docker compose down
 ```
 
-## Następny krok
+## Next Step
 
-W kolejnym etapie zamieniamy warstwę zapisu plikowego na bezpośredni sink do Elasticsearch z autoryzacją.
+In the next phase, we will replace the file-based storage layer with a direct, authenticated Elasticsearch sink.
