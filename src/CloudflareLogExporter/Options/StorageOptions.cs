@@ -9,6 +9,11 @@ public sealed class StorageOptions
     [Required]
     public string OutputPath { get; init; } = "/app/data/cloudflare-logs.ndjson";
 
+    public bool EnableDailyRolling { get; init; } = true;
+
+    [Range(0, long.MaxValue)]
+    public long MaxFileSizeBytes { get; init; } = 104_857_600;
+
     [Required]
     public string TimeZoneId { get; init; } = "UTC";
 
