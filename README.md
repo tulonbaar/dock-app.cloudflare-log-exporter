@@ -27,6 +27,8 @@ cp .env.example .env
 - `Cloudflare__ApiToken`
 - `Cloudflare__ZoneId`
 - optional: `Cloudflare__IngestionDelaySeconds` (default: `180`)
+- `Storage__EnableDailyRolling` (`true`/`false`, default: `true`)
+- `Storage__MaxFileSizeBytes` (default: `104857600`, set `0` to disable size-based rolling)
 - `Storage__TimeZoneId` (for example: `Europe/Warsaw`, `America/New_York`, `UTC`)
 - `Storage__RewriteCloudflareTimestampsToLocal` (`true`/`false`)
 
@@ -37,6 +39,11 @@ The token should have permissions to read logs for the zone.
 `Storage__TimeZoneId` controls how the application displays local time in its own logs and how it enriches records written to NDJSON. Raw Cloudflare timestamps stay in UTC, and their equivalent in the configured time zone is stored alongside them.
 
 If `Storage__RewriteCloudflareTimestampsToLocal=true`, Cloudflare time fields (for example `edgestarttimestamp`, `edgeendtimestamp`) are written to NDJSON in the `Storage__TimeZoneId` time zone, while their original UTC values are stored in fields with the `_utc` suffix.
+
+Output file rolling behavior:
+- daily active file name is generated from `Storage__OutputPath` and local date, for example: `cloudflare-logs-20260421.ndjson`
+- after the active file exceeds `Storage__MaxFileSizeBytes`, it is moved to the next suffix: `cloudflare-logs-20260421-1.ndjson`, then `-2`, `-3`, and so on
+- the file without suffix (`cloudflare-logs-YYYYMMDD.ndjson`) is always the current write target
 
 Each new NDJSON record also includes canonical event-time fields:
 - `_event_timestamp_source` - Cloudflare column used to determine event time
@@ -68,7 +75,7 @@ docker compose logs -f cloudflare-log-exporter
 
 The log file will appear locally in:
 
-- `./data/cloudflare-logs.ndjson`
+- `./data/cloudflare-logs-YYYYMMDD.ndjson`
 
 ## Stop
 

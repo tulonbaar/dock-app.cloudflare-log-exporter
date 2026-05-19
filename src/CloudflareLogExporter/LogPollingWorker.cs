@@ -78,15 +78,19 @@ public sealed class LogPollingWorker : BackgroundService
 
                 if (extractedLines.Count > 0)
                 {
-                    await File.AppendAllLinesAsync(_storageOptions.OutputPath, extractedLines, stoppingToken);
+                    var outputPath = ResolveActiveOutputPath(end);
+                    await File.AppendAllLinesAsync(outputPath, extractedLines, stoppingToken);
+                    EnsureRolledBySizeIfNeeded(outputPath);
+
                     _logger.LogInformation(
-                        "Saved {Count} log entries for window UTC {StartUtc} - {EndUtc} | {TimeZoneId} {StartLocal} - {EndLocal}.",
+                        "Saved {Count} log entries for window UTC {StartUtc} - {EndUtc} | {TimeZoneId} {StartLocal} - {EndLocal}. File: {OutputPath}",
                         extractedLines.Count,
                         FormatUtc(lastEnd),
                         FormatUtc(end),
                         _configuredTimeZone.TimeZoneId,
                         FormatLocal(lastEnd),
-                        FormatLocal(end));
+                        FormatLocal(end),
+                        outputPath);
                 }
                 else
                 {
@@ -107,6 +111,69 @@ public sealed class LogPollingWorker : BackgroundService
             }
 
             await Task.Delay(interval, stoppingToken);
+        }
+    }
+
+    private string ResolveActiveOutputPath(DateTimeOffset timestampUtc)
+    {
+        if (!_storageOptions.EnableDailyRolling)
+        {
+            return _storageOptions.OutputPath;
+        }
+
+        var localDate = TimeZoneInfo.ConvertTime(timestampUtc, _configuredTimeZone.TimeZoneInfo).Date;
+        var outputDirectory = Path.GetDirectoryName(_storageOptions.OutputPath) ?? ".";
+        var baseFileName = Path.GetFileNameWithoutExtension(_storageOptions.OutputPath);
+        var extension = Path.GetExtension(_storageOptions.OutputPath);
+
+        var dailyFileName = $"{baseFileName}-{localDate:yyyyMMdd}{extension}";
+        return Path.Combine(outputDirectory, dailyFileName);
+    }
+
+    private void EnsureRolledBySizeIfNeeded(string activeOutputPath)
+    {
+        if (_storageOptions.MaxFileSizeBytes <= 0)
+        {
+            return;
+        }
+
+        if (!File.Exists(activeOutputPath))
+        {
+            return;
+        }
+
+        var activeFileInfo = new FileInfo(activeOutputPath);
+
+        if (activeFileInfo.Length <= _storageOptions.MaxFileSizeBytes)
+        {
+            return;
+        }
+
+        var rolledPath = GetNextRolledPath(activeOutputPath);
+        File.Move(activeOutputPath, rolledPath);
+
+        _logger.LogInformation(
+            "Rolled log file by size. Previous active file moved to {RolledPath}. New active file: {ActivePath}.",
+            rolledPath,
+            activeOutputPath);
+    }
+
+    private static string GetNextRolledPath(string activePath)
+    {
+        var directory = Path.GetDirectoryName(activePath) ?? ".";
+        var baseFileName = Path.GetFileNameWithoutExtension(activePath);
+        var extension = Path.GetExtension(activePath);
+
+        var nextIndex = 1;
+        while (true)
+        {
+            var candidate = Path.Combine(directory, $"{baseFileName}-{nextIndex}{extension}");
+            if (!File.Exists(candidate))
+            {
+                return candidate;
+            }
+
+            nextIndex++;
         }
     }
 
